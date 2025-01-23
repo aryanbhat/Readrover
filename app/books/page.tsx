@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SearchBar } from "./components/SearchBar";
 import { FilterSheet } from "./components/FilterSheet";
@@ -13,10 +13,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Star } from "lucide-react";
+import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 
-import { mockBooks, genres, years, ratings, priceRanges } from "@/data/books";
+import { genres, years } from "@/data/books";
 import { Book } from "@/data/books";
+import { useQuery } from "@apollo/client";
+import {
+  AUTOCOMPLETE_SEARCH,
+  SEARCH_BOOKS,
+  // GET_BOOKS_COUNT,
+} from "@/lib/queries";
 
 export default function BooksPage() {
   const router = useRouter();
@@ -26,23 +32,29 @@ export default function BooksPage() {
   const [selectedGenre, setSelectedGenre] = useState(
     searchParams.get("genre") || "All Genres"
   );
+
   const [selectedYear, setSelectedYear] = useState(
     searchParams.get("year") || "All Years"
   );
-  const [selectedRating, setSelectedRating] = useState(
-    searchParams.get("rating") || "All Ratings"
-  );
-  const [selectedPrice, setSelectedPrice] = useState(
-    searchParams.get("price") || "All Prices"
-  );
+
   const [priceRange, setPriceRange] = useState([
-    Number(searchParams.get("minPrice")) || 0,
-    Number(searchParams.get("maxPrice")) || 100,
+    Number(searchParams.get("minPrice")) || 1,
+    Number(searchParams.get("maxPrice")) || 900,
   ]);
-  const [ratingValue, setRatingValue] = useState([
-    Number(searchParams.get("minRating")) || 3.5,
+
+  const [yearRange, setYearRange] = useState([
+    Number(searchParams.get("minYear")) || 1900,
+    Number(searchParams.get("maxYear")) || 2025,
   ]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const [ratingValue, setRatingValue] = useState(
+    Number(searchParams.get("minRating")) || 0
+  );
+
+  const [currentPage, setCurrentPage] = useState(
+    Number(searchParams.get("page")) || 1
+  );
+  const booksPerPage = 12;
 
   const updateURLParams = (params: Record<string, string>) => {
     const newSearchParams = new URLSearchParams(searchParams.toString());
@@ -68,46 +80,44 @@ export default function BooksPage() {
     updateURLParams({ genre: value === "All Genres" ? "" : value });
   };
 
-  const suggestions = useMemo(() => {
-    if (!searchQuery) return [];
+  const {
+    data: booksData,
+    loading: booksLoading,
+    error: booksError,
+  } = useQuery(SEARCH_BOOKS, {
+    variables: {
+      query: searchQuery,
+      from: (currentPage - 1) * booksPerPage,
+      size: booksPerPage,
+      filters: {
+        genre: selectedGenre === "All Genres" ? "" : selectedGenre,
+        rating: ratingValue,
+        minPrice: priceRange[0],
+        maxPrice: priceRange[1],
+      },
+    },
+  });
 
-    const searchLower = searchQuery.toLowerCase();
-    const titleMatches = mockBooks
-      .filter((book: Book) => book.title.toLowerCase().includes(searchLower))
-      .map((book: Book) => ({ type: "title", text: book.title }));
+  const paginatedBooks = useMemo(() => {
+    if (booksLoading || booksError || !booksData)
+      return { books: [], totalBooks: 0, totalPages: 0 };
 
-    const authorMatches = mockBooks
-      .filter((book: Book) => book.author.toLowerCase().includes(searchLower))
-      .map((book: Book) => ({ type: "author", text: book.author }));
+    const books = booksData.search.books;
+    const totalBooks = booksData?.search?.total || 0;
+    const totalPages = booksData?.search?.pages || 0;
 
-    const uniqueResults = [...titleMatches, ...authorMatches]
-      .filter(
-        (item, index, self) =>
-          index === self.findIndex((t) => t.text === item.text)
-      )
-      .slice(0, 5);
+    return {
+      books,
+      totalBooks,
+      totalPages,
+    };
+  }, [booksData, booksLoading, booksError]);
 
-    return uniqueResults;
-  }, [searchQuery]);
-
-  const filteredBooks = useMemo(() => {
-    return mockBooks.filter((book) => {
-      const searchMatch =
-        !searchQuery ||
-        book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        book.author.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const genreMatch =
-        selectedGenre === "All Genres" || book.genre === selectedGenre;
-
-      const ratingMatch = book.rating >= ratingValue[0];
-
-      const priceMatch =
-        book.price >= priceRange[0] && book.price <= priceRange[1];
-
-      return searchMatch && genreMatch && ratingMatch && priceMatch;
-    });
-  }, [searchQuery, selectedGenre, ratingValue, priceRange]);
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    updateURLParams({ page: page.toString() });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,22 +126,21 @@ export default function BooksPage() {
           <SearchBar
             searchQuery={searchQuery}
             onSearchChange={handleSearchChange}
-            suggestions={suggestions}
-            showSuggestions={showSuggestions}
-            setShowSuggestions={setShowSuggestions}
           />
           <div className="flex flex-wrap gap-2">
             <Select value={selectedGenre} onValueChange={handleGenreChange}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Genre" />
               </SelectTrigger>
-              <SelectContent>
-                {genres.map((genre) => (
-                  <SelectItem key={genre} value={genre}>
-                    {genre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+              {genres && (
+                <SelectContent>
+                  {genres.map((genre) => (
+                    <SelectItem key={genre} value={genre}>
+                      {genre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              )}
             </Select>
             <FilterSheet
               selectedYear={selectedYear}
@@ -140,6 +149,8 @@ export default function BooksPage() {
               setSelectedGenre={setSelectedGenre}
               priceRange={priceRange}
               setPriceRange={setPriceRange}
+              yearRange={yearRange}
+              setYearRange={setYearRange}
               ratingValue={ratingValue}
               setRatingValue={setRatingValue}
               years={years}
@@ -153,7 +164,10 @@ export default function BooksPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setSearchQuery("")}
+              onClick={() => {
+                setSearchQuery("");
+                updateURLParams({ q: "" });
+              }}
             >
               Search: {searchQuery} ×
             </Button>
@@ -162,7 +176,10 @@ export default function BooksPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setSelectedGenre("All Genres")}
+              onClick={() => {
+                setSelectedGenre("All Genres");
+                updateURLParams({ genre: "" });
+              }}
             >
               {selectedGenre} ×
             </Button>
@@ -171,27 +188,36 @@ export default function BooksPage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setSelectedYear("All Years")}
+              onClick={() => {
+                setSelectedYear("All Years");
+                updateURLParams({ year: "" });
+              }}
             >
               {selectedYear} ×
             </Button>
           )}
-          {ratingValue[0] > 0 && (
+          {ratingValue > 0 && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setRatingValue([0])}
+              onClick={() => {
+                setRatingValue(0);
+                updateURLParams({ minRating: "" });
+              }}
               className="flex items-center gap-1"
             >
-              <span>{ratingValue[0]}+</span>
-              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+              <span>{ratingValue}+</span>
+              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />×
             </Button>
           )}
-          {(priceRange[0] > 0 || priceRange[1] < 100) && (
+          {(priceRange[0] > 1 || priceRange[1] < 900) && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => setPriceRange([0, 100])}
+              onClick={() => {
+                setPriceRange([1, 900]);
+                updateURLParams({ minPrice: "", maxPrice: "" });
+              }}
             >
               ${priceRange[0]} - ${priceRange[1]} ×
             </Button>
@@ -199,16 +225,83 @@ export default function BooksPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredBooks.length === 0 ? (
+          {booksLoading ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-lg text-muted-foreground">Loading books...</p>
+            </div>
+          ) : paginatedBooks.books.length === 0 ? (
             <div className="col-span-full text-center py-12">
               <p className="text-lg text-muted-foreground">
                 No books found matching your criteria.
               </p>
             </div>
           ) : (
-            filteredBooks.map((book) => <BookCard key={book.id} book={book} />)
+            paginatedBooks.books.map((book: Book) => (
+              <BookCard key={book.bookId} book={book} />
+            ))
           )}
         </div>
+
+        {paginatedBooks.books.length > 0 && paginatedBooks.totalPages > 1 && (
+          <div className="flex justify-center items-center gap-2 mt-8">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+
+            <div className="flex items-center gap-2">
+              {Array.from(
+                { length: paginatedBooks.totalPages },
+                (_, i) => i + 1
+              )
+                .filter(
+                  (page) =>
+                    page === 1 ||
+                    page === paginatedBooks.totalPages ||
+                    Math.abs(currentPage - page) <= 1
+                )
+                .map((page, index, array) => (
+                  <React.Fragment key={page}>
+                    {index > 0 && array[index - 1] !== page - 1 && (
+                      <span className="text-muted-foreground">...</span>
+                    )}
+                    <Button
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(page)}
+                    >
+                      {page}
+                    </Button>
+                  </React.Fragment>
+                ))}
+            </div>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === paginatedBooks.totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {searchQuery &&
+          paginatedBooks.books.length > 0 &&
+          paginatedBooks.totalBooks > 0 &&
+          !booksLoading &&
+          !booksError && (
+            <div className="text-center text-sm text-muted-foreground mt-4">
+              Showing {(currentPage - 1) * booksPerPage + 1} to{" "}
+              {Math.min(currentPage * booksPerPage, paginatedBooks.totalBooks)}{" "}
+              of {paginatedBooks.totalBooks} books
+            </div>
+          )}
       </div>
     </div>
   );

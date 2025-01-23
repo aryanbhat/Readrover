@@ -27,8 +27,10 @@ interface FilterSheetProps {
   setSelectedGenre: (genre: string) => void;
   priceRange: number[];
   setPriceRange: (range: number[]) => void;
-  ratingValue: number[];
-  setRatingValue: (rating: number[]) => void;
+  yearRange: number[];
+  setYearRange: (range: number[]) => void;
+  ratingValue: number;
+  setRatingValue: (rating: number) => void;
   years: string[];
   updateURLParams: (params: Record<string, string>) => void;
 }
@@ -40,6 +42,8 @@ export function FilterSheet({
   setSelectedGenre,
   priceRange,
   setPriceRange,
+  yearRange,
+  setYearRange,
   ratingValue,
   setRatingValue,
   years,
@@ -51,30 +55,37 @@ export function FilterSheet({
   const [tempYear, setTempYear] = useState(selectedYear);
   const [tempPriceRange, setTempPriceRange] = useState(priceRange);
   const [tempRatingValue, setTempRatingValue] = useState(ratingValue);
+  const [tempYearRange, setTempYearRange] = useState(yearRange);
 
   const applyFilters = () => {
     setSelectedYear(tempYear);
     setPriceRange(tempPriceRange);
     setRatingValue(tempRatingValue);
+    setYearRange(tempYearRange);
     updateURLParams({
-      year: tempYear,
+      // year: tempYear,
       minPrice: tempPriceRange[0].toString(),
       maxPrice: tempPriceRange[1].toString(),
-      minRating: tempRatingValue[0].toString(),
+      minRating: tempRatingValue.toString(),
+      // minYear: tempYearRange[0].toString(),
+      // maxYear: tempYearRange[1].toString(),
     });
     setOpen(false);
   };
 
   const resetFilters = () => {
-    setTempYear("All Years");
-    setTempPriceRange([0, 100]);
-    setTempRatingValue([3.5]);
+    setSelectedYear("All Years");
+    setPriceRange([1, 900]);
+    setRatingValue(0);
+    setYearRange([1900, 2025]);
     setSelectedGenre("All Genres");
     updateURLParams({
       year: "",
       minPrice: "",
       maxPrice: "",
       minRating: "",
+      minYear: "",
+      maxYear: "",
     });
     setOpen(false);
   };
@@ -102,8 +113,8 @@ export function FilterSheet({
                 Price: ${tempPriceRange[0]} - ${tempPriceRange[1]}
               </p>
               <Slider
-                min={0}
-                max={100}
+                min={1}
+                max={900}
                 step={1}
                 value={[tempPriceRange[0], tempPriceRange[1]]}
                 onValueChange={(value) =>
@@ -113,11 +124,35 @@ export function FilterSheet({
                 minStepsBetweenThumbs={1}
               />
               <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                <span>$0</span>
-                <span>$100</span>
+                <span>$1</span>
+                <span>$900</span>
               </div>
             </div>
           </div>
+          {/* 
+          <div className="space-y-4">
+            <h4 className="font-medium leading-none">Price Range</h4>
+            <div className="bg-secondary/50 p-4 rounded-lg">
+              <p className="text-sm text-muted-foreground mb-3">
+                Year: {tempYearRange[0]} - {tempYearRange[1]}
+              </p>
+              <Slider
+                min={1900}
+                max={2025}
+                step={1}
+                value={[tempYearRange[0], tempYearRange[1]]}
+                onValueChange={(value) =>
+                  setTempYearRange(value as [number, number])
+                }
+                className="w-full"
+                minStepsBetweenThumbs={1}
+              />
+              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                <span>1900</span>
+                <span>2025</span>
+              </div>
+            </div>
+          </div> */}
 
           <div className="space-y-4">
             <h4 className="font-medium leading-none">Minimum Rating</h4>
@@ -128,7 +163,7 @@ export function FilterSheet({
                     <Star
                       key={i}
                       className={`h-4 w-4 ${
-                        i < tempRatingValue[0]
+                        i < tempRatingValue
                           ? "fill-yellow-400 text-yellow-400"
                           : "fill-muted text-muted"
                       }`}
@@ -136,15 +171,15 @@ export function FilterSheet({
                   ))}
                 </div>
                 <span className="text-sm text-muted-foreground">
-                  {tempRatingValue[0]} & up
+                  {tempRatingValue} & up
                 </span>
               </div>
               <Slider
                 min={0}
                 max={5}
                 step={0.5}
-                value={tempRatingValue}
-                onValueChange={setTempRatingValue}
+                value={[tempRatingValue]}
+                onValueChange={(value) => setTempRatingValue(value[0])}
                 className="w-full"
               />
               <div className="flex justify-between mt-2 text-xs text-muted-foreground">
@@ -153,7 +188,7 @@ export function FilterSheet({
               </div>
             </div>
           </div>
-
+          {/* 
           <div className="space-y-2">
             <h4 className="font-medium leading-none">Publication Year</h4>
             <Select value={tempYear} onValueChange={setTempYear}>
@@ -168,7 +203,7 @@ export function FilterSheet({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </div> */}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={resetFilters}>
